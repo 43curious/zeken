@@ -25,7 +25,9 @@ const user = Astro.locals.user;
 
 <Layout title={title}>
     <div class="app">
-        <Sidebar />
+        <div transition:animate="none">
+            <Sidebar />
+        </div>
         <button
             class="sidebar-backdrop"
             id="sidebar-backdrop"

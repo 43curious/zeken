@@ -1,11 +1,13 @@
 import { defineMiddleware } from 'astro:middleware';
 import { getCurrentUser } from './lib/server-auth';
+import { ensureSchema } from './lib/db';
 
 const PUBLIC_PATHS = new Set(['/', '/login']);
 const PUBLIC_PREFIXES = ['/api', '/favicon', '/_astro'];
 
 export const onRequest = defineMiddleware(async (context, next) => {
   try {
+    await ensureSchema();
     const { pathname } = context.url;
     const isPublic =
       PUBLIC_PATHS.has(pathname) ||

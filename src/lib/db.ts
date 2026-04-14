@@ -98,7 +98,7 @@ async function initSchema() {
     )`
   ], "write");
 
-  // Migration: Add role column if missing (LibSQL doesn't have PRAGMA table_info in the same way, but better safe than sorry)
+  // Migration: Add role column if missing
   try {
     await db.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
   } catch (e) {}
@@ -112,9 +112,18 @@ async function initSchema() {
   await db.execute('CREATE INDEX IF NOT EXISTS pool_category_idx ON pool_categories(categoryId)');
 }
 
-// Ensure the schema is ready (Note: in a serverless env, we might want to call this elsewhere, 
-// but for simplicity we'll try to run it on import or first use)
-initSchema().catch(console.error);
+// Store the init promise so we can await it before any DB operation
+let schemaReady: Promise<void> | null = null;
+
+export function ensureSchema(): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = initSchema();
+  }
+  return schemaReady;
+}
+
+// Start initialization eagerly
+ensureSchema().catch(console.error);
 
 export async function seedDefaultCategories(userId: string) {
   const existing = await db.execute({

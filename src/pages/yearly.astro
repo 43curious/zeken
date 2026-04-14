@@ -436,7 +436,7 @@ import YearlyTracking from "../components/YearlyTracking.astro";
         Renderers.renderSidebarTotal(filteredByMonth);
     }
 
-    window.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('astro:page-load', async () => {
         UI.initSidebar();
         const hasUser = await API.requireUser();
         if (!hasUser) return;

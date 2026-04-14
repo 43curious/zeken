@@ -226,7 +226,7 @@ import CategoriesManage from "../components/CategoriesManage.astro";
         });
     }
 
-    window.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('astro:page-load', async () => {
         UI.initSidebar();
         initCategoryModal();
         const hasUser = await API.requireUser();

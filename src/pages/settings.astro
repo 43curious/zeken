@@ -256,7 +256,7 @@ const user = Astro.locals.user;
         URL.revokeObjectURL(url);
     }
 
-    window.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('astro:page-load', async () => {
         UI.initSidebar();
 
         const nameInput = document.getElementById('settings-name') as HTMLInputElement | null;

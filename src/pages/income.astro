@@ -80,7 +80,7 @@ import ExpenseList from "../components/ExpenseList.astro";
         renderAll();
     }
 
-    window.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('astro:page-load', async () => {
         UI.initSidebar();
         
         const hasUser = await API.requireUser();

@@ -110,7 +110,7 @@ const categoriesActive = showCategories && defaultTab === "categories";
         });
     }
 
-    window.addEventListener("DOMContentLoaded", initRecordPanel);
+    document.addEventListener("astro:page-load", initRecordPanel);
 </script>
 
 <style>
