@@ -35,7 +35,7 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
   const totalWithdrawalsOverall = Number(withdrawalSumRes.rows[0].total || 0);
   
   // Overall Rollover (Savings accessible to pools or just general savings)
-  const overallRollover = totalIncome - totalExpense - totalWithdrawalsOverall;
+  const overallRollover = totalIncome - totalExpense;
 
   if (poolsRes.rows.length === 0) {
     return json([{
@@ -106,11 +106,18 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
     const wSum = withdrawalSumByPool.get(pid) || 0;
     const startBal = Number(row.startingBalance || 0);
     
-    // Balance = Starting Balance + Linked Incomes - Linked Expenses - Withdrawals
-    const balance = startBal + sums.income - sums.expense - wSum;
+    // Balance = Starting Balance + Linked Expenses - Linked Incomes - Withdrawals
+    const balance = startBal + sums.expense - sums.income - wSum;
 
     return {
-      ...row,
+      id: row.id as string,
+      userId: row.userId as string,
+      name: row.name as string,
+      type: row.type as string,
+      target: row.target as number | null,
+      startingBalance: row.startingBalance as number,
+      isClosed: Boolean(row.isClosed),
+      created: row.created as string,
       balance,
       totalWithdrawals: wSum,
       availableBalance: balance,
@@ -126,7 +133,12 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
     userId: user.id,
     name: 'Total Rollover',
     type: 'rollover',
+    target: null,
+    startingBalance: 0,
+    isClosed: false,
+    created: new Date().toISOString(),
     balance: overallRollover,
+    totalWithdrawals: 0,
     availableBalance: overallRollover,
     linkedCategories: [],
     withdrawals: [],
@@ -153,7 +165,7 @@ export async function POST({ request, cookies }: { request: Request; cookies: As
         sql: 'INSERT INTO pools (id, userId, name, type, target, startingBalance) VALUES (?, ?, ?, ?, ?, ?)',
         args: [id, user.id, name, type, target || null, startingBalance || 0]
     },
-    ...linkedCategoryIds.map(catId => ({
+    ...linkedCategoryIds.map((catId: string) => ({
         sql: 'INSERT INTO pool_categories (poolId, categoryId) VALUES (?, ?)',
         args: [id, catId]
     }))
@@ -188,7 +200,7 @@ export async function PATCH({ request, cookies }: { request: Request; cookies: A
     if (linkedCategoryIds !== undefined) {
       await db.execute({ sql: 'DELETE FROM pool_categories WHERE poolId = ?', args: [poolId] });
       if (linkedCategoryIds.length > 0) {
-        await db.batch(linkedCategoryIds.map(catId => ({
+        await db.batch(linkedCategoryIds.map((catId: string) => ({
           sql: 'INSERT INTO pool_categories (poolId, categoryId) VALUES (?, ?)',
           args: [poolId, catId]
         })), "write");
