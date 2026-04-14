@@ -17,6 +17,7 @@ import YearlyTracking from "../components/YearlyTracking.astro";
     import type { Category, Pool } from '../lib/types';
 
     let expenseCategories: Category[] = [];
+    let currentPools: Pool[] = [];
 
     function formatMoney(value: number) {
         return `€${value.toFixed(2)}`;
@@ -72,11 +73,14 @@ import YearlyTracking from "../components/YearlyTracking.astro";
             <article class="pool-item ${isRollover ? 'rollover-pool' : 'savings-pool'} ${pool.isClosed ? 'closed-pool' : ''}">
                 <div class="pool-status-header">
                     <span class="pool-type-chip">${isRollover ? 'Rollover' : (pool.isClosed ? 'Completed' : 'Savings pool')}</span>
-                    ${!isRollover ? `
-                    <button class="btn-pool-status" data-id="${pool.id}" data-closed="${pool.isClosed}" title="${pool.isClosed ? 'Reopen pool' : 'Mark as done'}">
-                        ${pool.isClosed ? '↺' : '✓'}
-                    </button>
-                    ` : ''}
+                    <div class="pool-controls">
+                        ${!isRollover ? `
+                        <button class="btn-pool-edit" data-id="${pool.id}" title="Edit pool">✎</button>
+                        <button class="btn-pool-status" data-id="${pool.id}" data-closed="${pool.isClosed}" title="${pool.isClosed ? 'Reopen pool' : 'Mark as done'}">
+                            ${pool.isClosed ? '↺' : '✓'}
+                        </button>
+                        ` : ''}
+                    </div>
                 </div>
                 <div class="pool-item-head">
                     <div>
@@ -84,7 +88,7 @@ import YearlyTracking from "../components/YearlyTracking.astro";
                     </div>
                     <div class="pool-balance-group">
                         <span class="pool-balance">${formatMoney(pool.availableBalance)}</span>
-                        ${pool.totalWithdrawals > 0 ? `<span class="pool-balance-sub">from ${formatMoney(pool.balance)} saved</span>` : ''}
+                        ${pool.totalWithdrawals > 0 || pool.startingBalance > 0 ? `<span class="pool-balance-sub">from ${formatMoney(pool.balance)} saved</span>` : ''}
                     </div>
                 </div>
                 <div class="pool-meta">
@@ -118,11 +122,12 @@ import YearlyTracking from "../components/YearlyTracking.astro";
     }
 
     function renderPools(pools: Pool[]) {
+        currentPools = pools;
         const yearlyRolloverEl = document.getElementById('yearly-rollover');
-        const yearlyBankEl = document.getElementById('yearly-bank-balance');
         const poolsGrid = document.getElementById('savings-pools-grid');
         const rollover = pools.find((pool) => pool.type === 'rollover');
         const savingsPools = pools.filter((pool) => pool.type === 'savings');
+        
         const addPoolCard = `
             <button class="pool-add-card" id="btn-add-pool" type="button">
                 <span class="pool-add-mark">+</span>
@@ -158,12 +163,23 @@ import YearlyTracking from "../components/YearlyTracking.astro";
     function attachPoolHandlers() {
         document.getElementById('btn-add-pool')?.addEventListener('click', () => {
             renderPoolCategoryOptions();
-            setPoolModalOpen(true);
+            openPoolModal();
         });
 
         document.getElementById('btn-edit-bank')?.addEventListener('click', async () => {
             const user = await API.getUser();
             openBankModal(user.bankBalance);
+        });
+
+        document.querySelectorAll('.btn-pool-edit').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = (e.currentTarget as HTMLElement).dataset.id!;
+                const pool = currentPools.find(p => p.id === id);
+                if (pool) {
+                    renderPoolCategoryOptions(pool.linkedCategoryIds);
+                    openPoolModal(pool);
+                }
+            });
         });
 
         document.querySelectorAll('.btn-pool-withdraw').forEach(btn => {
@@ -262,13 +278,13 @@ import YearlyTracking from "../components/YearlyTracking.astro";
         }
     }
 
-    function renderPoolCategoryOptions() {
+    function renderPoolCategoryOptions(selectedIds: string[] = []) {
         const picker = document.getElementById('pool-category-picker');
         if (!picker) return;
 
         picker.innerHTML = expenseCategories.map((category) => `
             <label class="pool-category-option">
-                <input type="checkbox" value="${category.id}">
+                <input type="checkbox" value="${category.id}" ${selectedIds.includes(category.id) ? 'checked' : ''}>
                 <span class="pool-category-copy">
                     <span class="pool-category-swatch" style="background: ${category.color}20; color: ${category.color}">
                         ${escapeHtml(category.emoji)}
@@ -280,32 +296,53 @@ import YearlyTracking from "../components/YearlyTracking.astro";
     }
 
     function resetPoolForm() {
-        const nameInput = document.getElementById('pool-name') as HTMLInputElement | null;
-        const targetInput = document.getElementById('pool-target') as HTMLInputElement | null;
-        const checkboxes = document.querySelectorAll<HTMLInputElement>('#pool-category-picker input[type="checkbox"]');
-
-        if (nameInput) nameInput.value = '';
-        if (targetInput) targetInput.value = '';
-        checkboxes.forEach((checkbox) => {
-            checkbox.checked = false;
-        });
+        (document.getElementById('pool-id') as HTMLInputElement).value = '';
+        (document.getElementById('pool-name') as HTMLInputElement).value = '';
+        (document.getElementById('pool-starting-balance') as HTMLInputElement).value = '';
+        (document.getElementById('pool-target') as HTMLInputElement).value = '';
+        document.querySelectorAll<HTMLInputElement>('#pool-category-picker input[type="checkbox"]').forEach(c => c.checked = false);
+        
+        document.getElementById('pool-modal-title')!.textContent = 'Create Savings Pool';
+        document.getElementById('btn-delete-pool')!.style.display = 'none';
+        document.getElementById('btn-save-pool')!.textContent = 'Save Pool';
     }
 
-    function setPoolModalOpen(isOpen: boolean) {
+    function openPoolModal(pool?: Pool) {
         const modal = document.getElementById('pool-modal');
         if (!modal) return;
-        modal.style.display = isOpen ? 'flex' : 'none';
-        if (!isOpen) resetPoolForm();
+        
+        resetPoolForm();
+        
+        if (pool) {
+            document.getElementById('pool-modal-title')!.textContent = 'Edit Savings Pool';
+            document.getElementById('pool-id')!.value = pool.id;
+            (document.getElementById('pool-name') as HTMLInputElement).value = pool.name;
+            (document.getElementById('pool-starting-balance') as HTMLInputElement).value = pool.startingBalance?.toString() || '';
+            (document.getElementById('pool-target') as HTMLInputElement).value = pool.target?.toString() || '';
+            document.getElementById('btn-delete-pool')!.style.display = 'block';
+            document.getElementById('btn-save-pool')!.textContent = 'Update Pool';
+            
+            // Checks for checkboxes should be handled by renderPoolCategoryOptions call
+        }
+        
+        modal.style.display = 'flex';
     }
 
-    async function createPool() {
-        const nameInput = document.getElementById('pool-name') as HTMLInputElement | null;
-        const targetInput = document.getElementById('pool-target') as HTMLInputElement | null;
+    function closePoolModal() {
+        const modal = document.getElementById('pool-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    async function savePool() {
+        const poolId = (document.getElementById('pool-id') as HTMLInputElement).value;
+        const nameInput = document.getElementById('pool-name') as HTMLInputElement;
+        const startBalInput = document.getElementById('pool-starting-balance') as HTMLInputElement;
+        const targetInput = document.getElementById('pool-target') as HTMLInputElement;
         const selectedCategories = Array.from(
             document.querySelectorAll<HTMLInputElement>('#pool-category-picker input[type="checkbox"]:checked')
         ).map((checkbox) => checkbox.value);
 
-        const name = nameInput?.value.trim() ?? '';
+        const name = nameInput.value.trim();
         if (!name) {
             UI.showToast('Pool name is required');
             return;
@@ -316,37 +353,57 @@ import YearlyTracking from "../components/YearlyTracking.astro";
             return;
         }
 
-        const targetValue = targetInput?.value.trim() ?? '';
+        const startBal = Number(startBalInput.value || 0);
+        const targetValue = targetInput.value.trim();
         const target = targetValue ? Number(targetValue) : null;
-        if (targetValue && (!Number.isFinite(target) || Number(target) < 0)) {
-            UI.showToast('Target must be zero or more');
-            return;
+
+        try {
+            if (poolId) {
+                await API.updatePool({
+                    poolId,
+                    name,
+                    startingBalance: startBal,
+                    target,
+                    linkedCategoryIds: selectedCategories
+                });
+                UI.showToast('Pool updated');
+            } else {
+                await API.addPool({
+                    name,
+                    startingBalance: startBal,
+                    target,
+                    linkedCategoryIds: selectedCategories
+                });
+                UI.showToast('Pool created');
+            }
+            closePoolModal();
+            renderYearly();
+        } catch (e) {
+            UI.showToast('Error saving pool');
         }
+    }
 
-        await API.addPool({
-            name,
-            linkedCategoryIds: selectedCategories,
-            target
-        });
-
-        UI.showToast('Savings pool created');
-        setPoolModalOpen(false);
-        renderYearly();
+    async function deletePool() {
+        const poolId = (document.getElementById('pool-id') as HTMLInputElement).value;
+        if (!poolId || !confirm('Are you sure you want to delete this pool? This cannot be undone.')) return;
+        
+        try {
+            await API.deletePool(poolId);
+            UI.showToast('Pool deleted');
+            closePoolModal();
+            renderYearly();
+        } catch (e) {
+            UI.showToast('Error deleting pool');
+        }
     }
 
     function initPoolModal() {
-        document.getElementById('btn-cancel-pool')?.addEventListener('click', () => {
-            setPoolModalOpen(false);
-        });
-
-        document.getElementById('btn-save-pool')?.addEventListener('click', async () => {
-            await createPool();
-        });
+        document.getElementById('btn-cancel-pool')?.addEventListener('click', closePoolModal);
+        document.getElementById('btn-save-pool')?.addEventListener('click', savePool);
+        document.getElementById('btn-delete-pool')?.addEventListener('click', deletePool);
 
         document.getElementById('pool-modal')?.addEventListener('click', (event) => {
-            if (event.target === event.currentTarget) {
-                setPoolModalOpen(false);
-            }
+            if (event.target === event.currentTarget) closePoolModal();
         });
 
         // Withdraw modal listeners
@@ -361,7 +418,7 @@ import YearlyTracking from "../components/YearlyTracking.astro";
     async function renderYearly() {
         const year = Store.getCurrentYear();
         const [all, pools, user] = await Promise.all([
-            API.loadRecords(),
+            API.loadRecords(year),
             API.loadPools(year),
             API.getUser()
         ]);
@@ -373,7 +430,6 @@ import YearlyTracking from "../components/YearlyTracking.astro";
             yearlyBankEl.textContent = formatMoney(user.bankBalance);
         }
 
-        // Auto-prompt bank balance if 0
         if (user.bankBalance === 0 && !sessionStorage.getItem('bank_prompted')) {
             openBankModal(0);
             sessionStorage.setItem('bank_prompted', 'true');
@@ -429,11 +485,12 @@ import YearlyTracking from "../components/YearlyTracking.astro";
 
         renderPools(pools);
         
-        const filteredByMonth = all.filter(r => {
-            const [ry, rm] = r.date.split('-');
-            return parseInt(rm) - 1 === Store.getCurrentMonth() && parseInt(ry) === year;
+        // Sidebar total for current month specifically (using same logic as other pages)
+        const currentMonthRecords = all.filter(r => {
+            const date = new Date(r.date);
+            return date.getMonth() === Store.getCurrentMonth();
         });
-        Renderers.renderSidebarTotal(filteredByMonth);
+        Renderers.renderSidebarTotal(currentMonthRecords);
     }
 
     document.addEventListener('astro:page-load', async () => {

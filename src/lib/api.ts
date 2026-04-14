@@ -48,8 +48,11 @@ export const API = {
         return await parseResponse<Pool[]>(res);
     },
 
-    async loadRecords(): Promise<Record[]> {
-        const res = await fetch('/api/records');
+    async loadRecords(year?: number, month?: number): Promise<Record[]> {
+        const params = new URLSearchParams();
+        if (year) params.append('year', year.toString());
+        if (month !== undefined) params.append('month', (month + 1).toString());
+        const res = await fetch(`/api/records?${params.toString()}`);
         return await parseResponse<Record[]>(res);
     },
 
@@ -119,13 +122,35 @@ export const API = {
         return data;
     },
 
-    async addPool(payload: { name: string; linkedCategoryIds: string[]; target?: number | null }): Promise<{ id: string; success: boolean }> {
+    async addPool(payload: { name: string; linkedCategoryIds: string[]; target?: number | null; startingBalance?: number }): Promise<{ id: string; success: boolean }> {
         const res = await fetch('/api/pools', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         const data = await parseResponse<{ id: string; success: boolean }>(res);
+        notifyDataChanged();
+        return data;
+    },
+
+    async updatePool(payload: { poolId: string; name?: string; linkedCategoryIds?: string[]; target?: number | null; startingBalance?: number }): Promise<{ success: boolean }> {
+        const res = await fetch('/api/pools', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await parseResponse<{ success: boolean }>(res);
+        notifyDataChanged();
+        return data;
+    },
+
+    async deletePool(id: string): Promise<{ success: boolean }> {
+        const res = await fetch('/api/pools', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        const data = await parseResponse<{ success: boolean }>(res);
         notifyDataChanged();
         return data;
     },

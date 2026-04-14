@@ -24,21 +24,16 @@ import AppLayout from "../layouts/AppLayout.astro";
     async function renderCalendar() {
         const month = Store.getCurrentMonth();
         const year = Store.getCurrentYear();
-        const records = await API.loadRecords();
+        const records = await API.loadRecords(year, month);
         
         const el = document.getElementById('calendar-grid');
         if (!el) return;
 
-        const filteredByMonth = records.filter(r => {
-            const [ry, rm] = r.date.split('-');
-            return parseInt(rm) - 1 === month && parseInt(ry) === year;
-        });
-
-        Renderers.renderSidebarTotal(filteredByMonth);
+        Renderers.renderSidebarTotal(records);
 
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         const firstDay = new Date(year, month, 1).getDay();
-        const expenses = filteredByMonth.filter(r => r.type === 'expense');
+        const expenses = records.filter(r => r.type === 'expense');
 
         const dailyTotals: Record<number, number> = {};
         expenses.forEach(e => {

@@ -2,21 +2,27 @@ import db from '../../lib/db';
 import { json, requireCurrentUser } from '../../lib/server-auth';
 import type { AstroCookies } from 'astro';
 
-type RecordType = 'expense' | 'income';
-
-function isRecordType(value: unknown): value is RecordType {
-  return value === 'expense' || value === 'income';
-}
-
-export async function GET({ cookies }: { cookies: AstroCookies }) {
+export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies }) {
   const { user, response } = await requireCurrentUser(cookies);
   if (!user) return response;
 
-  const res = await db.execute({
-    sql: 'SELECT * FROM records WHERE userId = ? ORDER BY date DESC, created DESC',
-    args: [user.id]
-  });
+  const year = url.searchParams.get('year');
+  const month = url.searchParams.get('month');
 
+  let sql = 'SELECT * FROM records WHERE userId = ?';
+  const args: any[] = [user.id];
+
+  if (year && month) {
+    sql += ' AND date LIKE ?';
+    args.push(`${year}-${month.padStart(2, '0')}-%`);
+  } else if (year) {
+    sql += ' AND date LIKE ?';
+    args.push(`${year}-%`);
+  }
+
+  sql += ' ORDER BY date DESC, created DESC';
+
+  const res = await db.execute({ sql, args });
   return json(res.rows);
 }
 
@@ -32,17 +38,8 @@ export async function POST({ request, cookies }: { request: Request; cookies: As
   const location = String(data.location ?? '').trim();
   const date = String(data.date ?? '').trim();
 
-  if (!isRecordType(type) || !name || !Number.isFinite(amount) || amount <= 0 || !categoryId || !date) {
+  if (!type || !name || !Number.isFinite(amount) || amount <= 0 || !categoryId || !date) {
     return json({ error: 'Please provide a valid type, name, amount, category, and date.' }, { status: 400 });
-  }
-
-  const catRes = await db.execute({
-    sql: 'SELECT id FROM categories WHERE id = ? AND userId = ? AND type = ?',
-    args: [categoryId, user.id, type]
-  });
-
-  if (catRes.rows.length === 0) {
-    return json({ error: 'That category does not belong to your account.' }, { status: 400 });
   }
 
   const id = crypto.randomUUID();

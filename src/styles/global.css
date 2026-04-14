@@ -461,13 +461,24 @@ html {
     }
 }
 
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent body scroll, let app container handle it */
+}
+
 .app {
     display: grid;
     grid-template-columns: var(--sidebar-w) 1fr;
-    min-height: 100dvh;
+    height: 100dvh; /* Force exact viewport height */
     width: 100%;
     overflow: hidden;
     transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-wrapper {
+    height: 100dvh;
+    overflow: hidden;
 }
 
 /* Sidebar */
@@ -478,10 +489,10 @@ html {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    position: sticky;
-    top: 0;
+    position: relative; /* Changed from sticky, as .app handles the layout */
     height: 100dvh;
-    overflow: hidden;
+    overflow-y: auto; /* Allow sidebar to scroll internally if items overflow */
+    overflow-x: hidden;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

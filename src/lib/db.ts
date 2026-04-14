@@ -67,6 +67,7 @@ async function initSchema() {
       name TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'savings',
       target REAL,
+      startingBalance REAL DEFAULT 0,
       isClosed INTEGER DEFAULT 0,
       created TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
@@ -105,6 +106,10 @@ async function initSchema() {
   
   try {
     await db.execute("ALTER TABLE users ADD COLUMN bankBalance REAL DEFAULT 0");
+  } catch (e) {}
+
+  try {
+    await db.execute("ALTER TABLE pools ADD COLUMN startingBalance REAL DEFAULT 0");
   } catch (e) {}
 
   await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users(email) WHERE email IS NOT NULL');

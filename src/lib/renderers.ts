@@ -157,7 +157,6 @@ export const Renderers = {
         const cardTotal = document.getElementById('card-total');
         const cardRemaining = document.getElementById('card-remaining');
         const cardAvg = document.getElementById('card-avg');
-        const cardTop = document.getElementById('card-top');
         const avgEl = document.getElementById('stat-avg');
         const avgSubEl = document.getElementById('stat-avg-sub');
 
@@ -169,13 +168,11 @@ export const Renderers = {
             if (totalEl) totalEl.textContent = `€${totalIncome.toFixed(2)}`;
             if (cardTotal) cardTotal.classList.add('stat-blue');
             if (cardAvg) (cardAvg as HTMLElement).style.display = 'none';
-            if (cardTop) (cardTop as HTMLElement).style.display = 'none';
         } else {
             if (labelTotal) labelTotal.textContent = 'Total Spent';
             if (totalEl) totalEl.textContent = `€${totalSpent.toFixed(2)}`;
             if (cardTotal) cardTotal.classList.add('stat-red');
             if (cardAvg) (cardAvg as HTMLElement).style.display = 'grid';
-            if (cardTop) (cardTop as HTMLElement).style.display = 'grid';
         }
 
         if (remainingEl) {

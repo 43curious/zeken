@@ -8,17 +8,48 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
 
   const year = Number(url.searchParams.get('year') || new Date().getFullYear());
 
-  // Single query: get all pools
+  // 1. Get all pools
   const poolsRes = await db.execute({
     sql: 'SELECT * FROM pools WHERE userId = ? ORDER BY created ASC',
     args: [user.id]
   });
 
-  if (poolsRes.rows.length === 0) return json([]);
+  // Calculate Rollover (Cumulative net income up to this year/month)
+  // We'll calculate the total savings from the start of time for this user
+  const netRes = await db.execute({
+    sql: 'SELECT type, SUM(amount) as total FROM records WHERE userId = ? GROUP BY type',
+    args: [user.id]
+  });
+  
+  let totalIncome = 0;
+  let totalExpense = 0;
+  for (const row of netRes.rows) {
+    if (row.type === 'income') totalIncome = Number(row.total);
+    else totalExpense = Number(row.total);
+  }
+  
+  const withdrawalSumRes = await db.execute({
+    sql: 'SELECT SUM(amount) as total FROM pool_withdrawals WHERE userId = ?',
+    args: [user.id]
+  });
+  const totalWithdrawalsOverall = Number(withdrawalSumRes.rows[0].total || 0);
+  
+  // Overall Rollover (Savings accessible to pools or just general savings)
+  const overallRollover = totalIncome - totalExpense - totalWithdrawalsOverall;
+
+  if (poolsRes.rows.length === 0) {
+    return json([{
+      id: 'rollover',
+      name: 'Total Rollover',
+      type: 'rollover',
+      balance: overallRollover,
+      availableBalance: overallRollover
+    }]);
+  }
 
   const poolIds = poolsRes.rows.map(p => p.id as string);
 
-  // Batch: get all linked categories, withdrawals, and record sums in parallel
+  // Batch parallel queries
   const [allCategoriesRes, allWithdrawalsRes, allRecordSumsRes] = await Promise.all([
     db.execute({
       sql: `SELECT pc.poolId, c.id, c.name, c.emoji, c.color
@@ -29,11 +60,9 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
     }),
     db.execute({
       sql: `SELECT * FROM pool_withdrawals
-            WHERE poolId IN (${poolIds.map(() => '?').join(',')})
-            AND date BETWEEN ? AND ?`,
-      args: [...poolIds, `${year}-01-01`, `${year}-12-31`]
+            WHERE poolId IN (${poolIds.map(() => '?').join(',')})`,
+      args: poolIds
     }),
-    // Get all record sums grouped by categoryId and type for categories linked to any pool
     db.execute({
       sql: `SELECT pc.poolId, r.type, SUM(r.amount) as total
             FROM records r
@@ -44,17 +73,11 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
     })
   ]);
 
-  // Index results by poolId
   const categoriesByPool = new Map<string, any[]>();
   for (const row of allCategoriesRes.rows) {
     const pid = row.poolId as string;
     if (!categoriesByPool.has(pid)) categoriesByPool.set(pid, []);
-    categoriesByPool.get(pid)!.push({
-      id: row.id,
-      name: row.name,
-      emoji: row.emoji,
-      color: row.color
-    });
+    categoriesByPool.get(pid)!.push({ id: row.id, name: row.name, emoji: row.emoji, color: row.color });
   }
 
   const withdrawalsByPool = new Map<string, any[]>();
@@ -75,14 +98,16 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
     else entry.expense = Number(row.total);
   }
 
-  // Build final response
   const pools = poolsRes.rows.map(row => {
     const pid = row.id as string;
     const linkedCategories = categoriesByPool.get(pid) || [];
     const withdrawals = withdrawalsByPool.get(pid) || [];
     const sums = recordSumsByPool.get(pid) || { income: 0, expense: 0 };
     const wSum = withdrawalSumByPool.get(pid) || 0;
-    const balance = sums.income - sums.expense - wSum;
+    const startBal = Number(row.startingBalance || 0);
+    
+    // Balance = Starting Balance + Linked Incomes - Linked Expenses - Withdrawals
+    const balance = startBal + sums.income - sums.expense - wSum;
 
     return {
       ...row,
@@ -95,6 +120,19 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
     };
   });
 
+  // Add virtual rollover pool at the beginning
+  pools.unshift({
+    id: 'rollover',
+    userId: user.id,
+    name: 'Total Rollover',
+    type: 'rollover',
+    balance: overallRollover,
+    availableBalance: overallRollover,
+    linkedCategories: [],
+    withdrawals: [],
+    linkedCategoryIds: []
+  });
+
   return json(pools);
 }
 
@@ -103,7 +141,7 @@ export async function POST({ request, cookies }: { request: Request; cookies: As
   if (!user) return response;
 
   const data = await request.json();
-  const { name, linkedCategoryIds, target, type = 'savings' } = data;
+  const { name, linkedCategoryIds, target, startingBalance, type = 'savings' } = data;
 
   if (!name || !Array.isArray(linkedCategoryIds)) {
     return json({ error: 'Name and linked categories are required.' }, { status: 400 });
@@ -112,8 +150,8 @@ export async function POST({ request, cookies }: { request: Request; cookies: As
   const id = crypto.randomUUID();
   await db.batch([
     {
-        sql: 'INSERT INTO pools (id, userId, name, type, target) VALUES (?, ?, ?, ?, ?)',
-        args: [id, user.id, name, type, target || null]
+        sql: 'INSERT INTO pools (id, userId, name, type, target, startingBalance) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [id, user.id, name, type, target || null, startingBalance || 0]
     },
     ...linkedCategoryIds.map(catId => ({
         sql: 'INSERT INTO pool_categories (poolId, categoryId) VALUES (?, ?)',
@@ -129,8 +167,37 @@ export async function PATCH({ request, cookies }: { request: Request; cookies: A
   if (!user) return response;
 
   const data = await request.json();
-  const { poolId, amount, description, date, isClosed } = data;
+  const { poolId, amount, description, date, isClosed, name, linkedCategoryIds, target, startingBalance } = data;
 
+  // Handle pool updates (edit)
+  if (poolId && (name !== undefined || linkedCategoryIds !== undefined || target !== undefined || startingBalance !== undefined)) {
+    const updates = [];
+    const args = [];
+    if (name !== undefined) { updates.push('name = ?'); args.push(name); }
+    if (target !== undefined) { updates.push('target = ?'); args.push(target); }
+    if (startingBalance !== undefined) { updates.push('startingBalance = ?'); args.push(startingBalance); }
+    
+    if (updates.length > 0) {
+      args.push(poolId, user.id);
+      await db.execute({
+        sql: `UPDATE pools SET ${updates.join(', ')} WHERE id = ? AND userId = ?`,
+        args
+      });
+    }
+
+    if (linkedCategoryIds !== undefined) {
+      await db.execute({ sql: 'DELETE FROM pool_categories WHERE poolId = ?', args: [poolId] });
+      if (linkedCategoryIds.length > 0) {
+        await db.batch(linkedCategoryIds.map(catId => ({
+          sql: 'INSERT INTO pool_categories (poolId, categoryId) VALUES (?, ?)',
+          args: [poolId, catId]
+        })), "write");
+      }
+    }
+    return json({ success: true });
+  }
+
+  // Handle pool status (isClosed)
   if (isClosed !== undefined) {
     if (!poolId) return json({ error: 'Pool ID is required.' }, { status: 400 });
     await db.execute({
@@ -140,6 +207,7 @@ export async function PATCH({ request, cookies }: { request: Request; cookies: A
     return json({ success: true });
   }
 
+  // Handle withdrawals (Old logic still here)
   if (!poolId || !amount || !date) {
     return json({ error: 'Pool ID, amount, and date are required.' }, { status: 400 });
   }
@@ -151,4 +219,19 @@ export async function PATCH({ request, cookies }: { request: Request; cookies: A
   });
 
   return json({ id, success: true });
+}
+
+export async function DELETE({ request, cookies }: { request: Request; cookies: AstroCookies }) {
+  const { user, response } = await requireCurrentUser(cookies);
+  if (!user) return response;
+
+  const { id } = await request.json();
+  if (!id) return json({ error: 'Pool ID is required.' }, { status: 400 });
+
+  await db.execute({
+    sql: 'DELETE FROM pools WHERE id = ? AND userId = ?',
+    args: [id, user.id]
+  });
+
+  return json({ success: true });
 }
