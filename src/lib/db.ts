@@ -1,7 +1,7 @@
 import { createClient } from '@libsql/client';
 
-const url = import.meta.env.TURSO_DATABASE_URL || 'file:zeken.db';
-const authToken = import.meta.env.TURSO_AUTH_TOKEN;
+const url = process.env.TURSO_DATABASE_URL || 'file:zeken.db';
+const authToken = process.env.TURSO_AUTH_TOKEN;
 
 const db = createClient({
   url,
