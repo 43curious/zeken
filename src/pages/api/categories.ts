@@ -11,7 +11,11 @@ export async function GET({ cookies }: { cookies: AstroCookies }) {
     args: [user.id]
   });
 
-  return json(res.rows);
+  return json(res.rows, {
+    headers: {
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=600'
+    }
+  });
 }
 
 export async function POST({ request, cookies }: { request: Request; cookies: AstroCookies }) {

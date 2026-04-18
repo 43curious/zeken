@@ -145,7 +145,11 @@ export async function GET({ url, cookies }: { url: URL; cookies: AstroCookies })
     linkedCategoryIds: []
   });
 
-  return json(pools);
+  return json(pools, {
+    headers: {
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=600'
+    }
+  });
 }
 
 export async function POST({ request, cookies }: { request: Request; cookies: AstroCookies }) {

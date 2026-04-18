@@ -25,6 +25,8 @@ export interface Pool {
     availableBalance: number;
     isClosed: boolean;
     target?: number | null;
+    startingBalance: number;
+    created: string;
     linkedCategoryIds: string[];
     linkedCategories: PoolLinkedCategory[];
     withdrawals?: PoolWithdrawal[];

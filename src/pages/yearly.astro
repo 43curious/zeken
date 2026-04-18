@@ -14,6 +14,7 @@ import YearlyTracking from "../components/YearlyTracking.astro";
     import { Store } from '../lib/store';
     import { UI } from '../lib/ui-utils';
     import { Renderers } from '../lib/renderers';
+    import { DataSpecs, useData } from '../lib/app.data';
     import type { Category, Pool } from '../lib/types';
 
     let expenseCategories: Category[] = [];
@@ -315,7 +316,7 @@ import YearlyTracking from "../components/YearlyTracking.astro";
         
         if (pool) {
             document.getElementById('pool-modal-title')!.textContent = 'Edit Savings Pool';
-            document.getElementById('pool-id')!.value = pool.id;
+            (document.getElementById('pool-id') as HTMLInputElement).value = pool.id;
             (document.getElementById('pool-name') as HTMLInputElement).value = pool.name;
             (document.getElementById('pool-starting-balance') as HTMLInputElement).value = pool.startingBalance?.toString() || '';
             (document.getElementById('pool-target') as HTMLInputElement).value = pool.target?.toString() || '';
@@ -417,12 +418,13 @@ import YearlyTracking from "../components/YearlyTracking.astro";
 
     async function renderYearly() {
         const year = Store.getCurrentYear();
-        const [all, pools, user] = await Promise.all([
-            API.loadRecords(year),
-            API.loadPools(year),
-            API.getUser()
-        ]);
         
+        // Use useData for snappy, cached data retrieval
+        const [all, pools, user] = await Promise.all([
+            useData(DataSpecs.AllRecords()),
+            useData(DataSpecs.Pools(year)),
+            useData(DataSpecs.User())
+        ]);
         const yearlyGrid = document.getElementById('yearly-months-grid');
         const yearlyBankEl = document.getElementById('yearly-bank-balance');
 
@@ -497,7 +499,11 @@ import YearlyTracking from "../components/YearlyTracking.astro";
         UI.initSidebar();
         const hasUser = await API.requireUser();
         if (!hasUser) return;
-        expenseCategories = (await API.loadCategoryList()).filter((category) => category.type === 'expense');
+        
+        // Use useData for category list as well
+        const categoryList = await useData(DataSpecs.CategoryList());
+        expenseCategories = categoryList.filter((category) => category.type === 'expense');
+        
         initPoolModal();
         UI.initMonthNavigation(renderYearly);
         UI.bindDataRefresh(renderYearly);

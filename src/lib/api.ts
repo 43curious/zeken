@@ -1,11 +1,13 @@
 import { STORAGE_KEY } from './store';
 import type { Record, Category, User, CategoryMap, Pool } from './types';
+import { queryCache } from './query-cache';
 
 const DATA_EVENT = 'zeken:data-changed';
 
 function notifyDataChanged() {
     localStorage.setItem(DATA_EVENT, Date.now().toString());
     window.dispatchEvent(new CustomEvent(DATA_EVENT));
+    queryCache.clear();
 }
 
 async function parseResponse<T>(res: Response): Promise<T> {

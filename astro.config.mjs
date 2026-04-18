@@ -5,4 +5,8 @@ import netlify from '@astrojs/netlify';
 export default defineConfig({
   output: 'server',
   adapter: netlify(),
+  prefetch: {
+    prefetchAll: true,
+    defaultStrategy: 'hover'
+  },
 });

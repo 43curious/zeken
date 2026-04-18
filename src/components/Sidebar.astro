@@ -22,15 +22,26 @@ const user = Astro.locals.user;
         href="/dashboard"
         class={`nav-item ${isActive("/dashboard")}`}
         id="nav-dashboard"
+        data-astro-prefetch
     >
         <span class="nav-icon">⌂</span>
         <span>Dashboard</span>
     </a>
-    <a href="/income" class={`nav-item ${isActive("/income")}`} id="nav-income">
+    <a 
+        href="/income" 
+        class={`nav-item ${isActive("/income")}`} 
+        id="nav-income"
+        data-astro-prefetch
+    >
         <span class="nav-icon">↗</span>
         <span>Income</span>
     </a>
-    <a href="/yearly" class={`nav-item ${isActive("/yearly")}`} id="nav-yearly">
+    <a 
+        href="/yearly" 
+        class={`nav-item ${isActive("/yearly")}`} 
+        id="nav-yearly"
+        data-astro-prefetch
+    >
         <span class="nav-icon">▥</span>
         <span>Yearly</span>
     </a>
@@ -38,6 +49,7 @@ const user = Astro.locals.user;
         href="/all-expenses"
         class={`nav-item ${isActive("/all-expenses")}`}
         id="nav-all"
+        data-astro-prefetch
     >
         <span class="nav-icon">☰</span>
         <span>Transactions</span>
@@ -46,6 +58,7 @@ const user = Astro.locals.user;
         href="/calendar"
         class={`nav-item ${isActive("/calendar")}`}
         id="nav-calendar"
+        data-astro-prefetch
     >
         <span class="nav-icon">□</span>
         <span>Calendar</span>
@@ -54,6 +67,7 @@ const user = Astro.locals.user;
         href="/categories"
         class={`nav-item ${isActive("/categories")}`}
         id="nav-categories"
+        data-astro-prefetch
     >
         <span class="nav-icon">◫</span>
         <span>Categories</span>
@@ -65,6 +79,7 @@ const user = Astro.locals.user;
         class={`nav-item ${isActive("/settings") || isActive("/profile")}`}
         id="nav-settings"
         title="Settings"
+        data-astro-prefetch
     >
         <span class="nav-icon">⚙</span>
         <span>Settings</span>
@@ -76,6 +91,7 @@ const user = Astro.locals.user;
                 class={`nav-item ${isActive("/admin")}`}
                 id="nav-admin"
                 title="Admin"
+                data-astro-prefetch
             >
                 <span class="nav-icon">★</span>
                 <span>Admin Console</span>
@@ -88,3 +104,42 @@ const user = Astro.locals.user;
         <div class="amount" id="sidebar-total">€0.00</div>
     </div>
 </aside>
+
+<script>
+    import { prewarm, DataSpecs } from '../lib/app.data';
+    import { Store } from '../lib/store';
+
+    function initPrefetchHandlers() {
+        const year = Store.getCurrentYear();
+        const month = Store.getCurrentMonth();
+
+        // Dashboard prewarm
+        document.getElementById('nav-dashboard')?.addEventListener('mouseenter', () => {
+            prewarm(DataSpecs.MonthlyRecords(year, month));
+            prewarm(DataSpecs.Pools(year));
+        });
+
+        // Yearly prewarm
+        document.getElementById('nav-yearly')?.addEventListener('mouseenter', () => {
+            prewarm(DataSpecs.AllRecords());
+            prewarm(DataSpecs.Pools(year));
+        });
+
+        // Transactions prewarm
+        document.getElementById('nav-all')?.addEventListener('mouseenter', () => {
+            prewarm(DataSpecs.AllRecords());
+        });
+
+        // Categories prewarm
+        document.getElementById('nav-categories')?.addEventListener('mouseenter', () => {
+            prewarm(DataSpecs.Categories());
+        });
+
+        // Settings/User prewarm
+        document.getElementById('nav-settings')?.addEventListener('mouseenter', () => {
+            prewarm(DataSpecs.User());
+        });
+    }
+
+    document.addEventListener('astro:page-load', initPrefetchHandlers);
+</script>
